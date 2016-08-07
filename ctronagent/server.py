@@ -5,50 +5,25 @@ This provides a simple REST service we can use to instruct the agent
 to do things or return console outputs.
 """
 import os
-import ssl
 import threading
-import time
 import uuid
-from BaseHTTPServer import HTTPServer
-from SocketServer import ThreadingMixIn
 
 import jobthread
 from control import ControllerJob
 from ctronagent.agenthandler import CinchHTTPRequestHandler
+from ctronlibs.webserver import ThreadedHTTPServer, CinchHTTPBaseServer
 
 WORKSPACE = "ws"
 
 
-class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
-    """Handle requests in a separate thread."""
-    def __init__(self, listen, handler, cinchserver):
-        HTTPServer.__init__(self, listen, handler)
-        self.cinchserver = cinchserver
-
-
-class CinchAgentServer(object):
+class AgentHTTPServer(CinchHTTPBaseServer):
     def __init__(self, port=8989, sslkey=None, sslcert=None, wd=os.getcwd()):
-        self.initialdir = wd
-        self.port = port
-        self.sslkey = sslkey
-        self.sslcert = sslcert
-        self.serverthread = None
+        super(AgentHTTPServer, self).__init__(port, sslkey, sslcert, wd)
         self.controller = ControllerJob()
         self.jobthreads = dict()
-        self.lck = threading.Lock()
-        self.stop = False
         self.httpd = ThreadedHTTPServer(("0.0.0.0", port),
                                         CinchHTTPRequestHandler,
                                         self)
-        if sslkey:
-            protocol = ssl.PROTOCOL_TLSv1
-            if hasattr(ssl, "PROTOCOL_TLSv1_2"):
-                protocol = getattr(ssl, "PROTOCOL_TLSv1_2")
-
-            self.httpd.socket = ssl.wrap_socket(
-                keyfile=sslkey, certfile=sslcert,
-                server_side=True,
-                ssl_version=protocol)
 
     def get_temp_prefix(self):
         """
@@ -88,30 +63,19 @@ class CinchAgentServer(object):
         :return:
         """
         self.add_job(self.controller, None, None, "controller")
-        self.serverthread = threading.Thread(target=self.httpd.serve_forever)
-        self.serverthread.setDaemon(True)
-        self.serverthread.start()
+        super(AgentHTTPServer, self).start()
 
     def stop(self):
         """
         Stop the service
         :return:
         """
+        super(AgentHTTPServer, self).stop()
         self.controller.stop()
-        self.httpd.shutdown()
-        self.serverthread.join()
-
-    def wait(self):
-        """
-        Wait for the server to exit
-        :return:
-        """
-        while not self.stop:
-            time.sleep(5)
 
 
 if __name__ == "__main__":
-    srv = CinchAgentServer()
+    srv = AgentHTTPServer()
     srv.start()
     srv.wait()
 

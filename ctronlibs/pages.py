@@ -23,7 +23,7 @@ class FileTypeGlyfs(object):
         :param glyf:
         :return:
         """
-        self.types.append((glyf, pattern)
+        self.types.append((glyf, pattern))
 
     def match(self, name):
         """
